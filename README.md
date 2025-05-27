@@ -8,9 +8,9 @@ Since "Osu! Tatakae! Ouendan" is about cheering and battling I came up with zoku
 It may seem stupid that im just writing another open source osu! client but I plan to optimize, and make this a super customizable client. I want to support osu!game charts and a custom map format.
 
 ### Checklist
-- [ ] Map parsing
-- [ ] Window
-- [ ] Playing music
+- [x] Map parsing
+- [x] Window
+- [x] Playing music
 - [ ] Regular notes rendering
 - [ ] Render sliders
 - [ ] More to come....
