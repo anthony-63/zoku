@@ -133,6 +133,7 @@ pub struct TimingPoint {
     pub kiai_mode: bool,
 }
 
+#[derive(Clone)]
 pub enum HitObject {
     HitCircle(HitCircle),
     Slider(Slider),
@@ -140,6 +141,7 @@ pub enum HitObject {
     HoldNote(HoldNote),
 }
 
+#[derive(Clone)]
 pub struct HitCircle {
     pub x: i32,
     pub y: i32,
@@ -150,6 +152,7 @@ pub struct HitCircle {
     pub extras: HitObjectExtras,
 }
 
+#[derive(Clone)]
 pub enum SliderType {
     Linear,
     Bezier,
@@ -157,6 +160,7 @@ pub enum SliderType {
     Catmull,
 }
 
+#[derive(Clone)]
 pub struct Slider {
     pub x: i32,
     pub y: i32,
@@ -173,6 +177,7 @@ pub struct Slider {
     pub extras: HitObjectExtras,
 }
 
+#[derive(Clone)]
 pub struct Spinner {
     pub x: i32,
     pub y: i32,
@@ -184,6 +189,7 @@ pub struct Spinner {
     pub extras: HitObjectExtras,
 }
 
+#[derive(Clone)]
 pub struct HoldNote {
     pub x: i32,
     pub y: i32,
@@ -195,6 +201,7 @@ pub struct HoldNote {
     pub extras: HitObjectExtras,
 }
 
+#[derive(Clone)]
 pub struct HitObjectExtras {
     pub sample_set: i32,
     pub addition_set: i32,

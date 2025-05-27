@@ -19,7 +19,7 @@ fn window_conf() -> Conf {
 
 #[macroquad::main(window_conf)]
 async fn main() {
-    let map = OsuParser::from_osz("maps/yume.osz".into());
+    let map = OsuParser::from_osz("maps/clover.osz".into());
     let diff = &map.difficulties[0];
 
     let mut game = Game::new(diff);
