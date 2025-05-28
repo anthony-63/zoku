@@ -51,6 +51,7 @@ impl Game {
 
         loop {
             self.music.update();
+            self.timing.update(&self.music);
 
             self.notes.update(&self.music, &self.timing);
             self.notes.render(&self.music, self.playfield);

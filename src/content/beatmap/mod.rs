@@ -134,6 +134,24 @@ pub struct TimingPoint {
     pub kiai_mode: bool,
 }
 
+impl TimingPoint {
+    pub fn velocity(&self) -> f32 {
+        if self.ms_per_beat < 0.0 {
+            -self.ms_per_beat / 100.0
+        } else {
+            1.0
+        }
+    }
+    
+    pub fn beat_length(&self) -> f32 {
+        if self.ms_per_beat < 0.0 {
+            500.0
+        } else {
+            self.ms_per_beat
+        }
+    }
+}
+
 #[derive(Clone)]
 pub enum HitObject {
     HitCircle(HitCircle),
@@ -153,7 +171,7 @@ pub struct HitCircle {
     pub extras: HitObjectExtras,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub enum SliderType {
     Linear,
     Bezier,
