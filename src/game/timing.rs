@@ -3,8 +3,8 @@ use crate::content::beatmap::TimingPoint;
 use super::music::MusicManager;
 
 pub struct TimingPointManager {
-    pub current_uninherited: TimingPoint, // Last red line (BPM)
-    pub current_inherited: Option<TimingPoint>, // Current green line (velocity)
+    pub current_uninherited: TimingPoint,
+    pub current_inherited: Option<TimingPoint>,
     points: Vec<TimingPoint>,
     index: usize,
 }

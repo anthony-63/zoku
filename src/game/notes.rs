@@ -27,6 +27,7 @@ pub enum RenderableObject {
 #[derive(Debug, Clone)]
 pub struct RenderableCircle {
     combo_color: (f32, f32, f32),
+    combo: usize,
     time: f32,
     x: f32,
     y: f32,
@@ -35,13 +36,25 @@ pub struct RenderableCircle {
 #[derive(Debug, Clone)]
 pub struct RenderableSlider {
     combo_color: (f32, f32, f32),
+    combo: usize,
     time: f32,
     x: f32,
     y: f32,
     curves: Vec<Vec2>,
     curve_type: SliderType,
+    segments: Vec<Vec2>,
     length: f32,
     repeat: usize,
+}
+
+impl RenderableSlider {
+    pub fn total_duration(&self) -> f32 {
+        self.length * self.repeat as f32
+    }
+
+    pub fn end_time(&self) -> f32 {
+        self.time + self.total_duration()
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -79,7 +92,7 @@ impl NoteSpawner {
             fade_in,
             slider_multiplier: difficulty.slider_multiplier,
             cs: difficulty.circle_size,
-            combo: 0,
+            combo: 1,
             combo_colors: vec![
                 (0.90, 0.94, 0.39),
                 (0.78, 0.69, 0.99),
@@ -117,7 +130,44 @@ impl NoteSpawner {
     fn alpha(&self, note_time: f32, current_time: f32) -> f32 {
         let note_start = note_time - self.preemt;
         let fade_in_end = note_start + self.fade_in;
-        current_time / fade_in_end
+
+        if current_time < note_start {
+            0.0
+        } else if current_time < fade_in_end {
+            (current_time - note_start) / self.fade_in
+        } else if current_time < note_time {
+            1.0
+        } else {
+            let fade_out_duration = 150.0; // ms
+            let time_since_hit = current_time - note_time;
+            if time_since_hit < fade_out_duration {
+                1.0 - (time_since_hit / fade_out_duration)
+            } else {
+                0.0
+            }
+        }
+    }
+
+    fn slider_alpha(&self, slider: &RenderableSlider, current_time: f32) -> f32 {
+        let note_start = slider.time - self.preemt;
+        let fade_in_end = note_start + self.fade_in;
+        let slider_end = slider.end_time();
+
+        if current_time < note_start {
+            0.0
+        } else if current_time < fade_in_end {
+            (current_time - note_start) / self.fade_in
+        } else if current_time < slider_end {
+            1.0
+        } else {
+            let fade_out_duration = 150.0;
+            let time_since_end = current_time - slider_end;
+            if time_since_end < fade_out_duration {
+                1.0 - (time_since_end / fade_out_duration)
+            } else {
+                0.0
+            }
+        }
     }
 
     fn color_with_alpha(&self, rgb: (f32, f32, f32), alpha: f32) -> Color {
@@ -129,7 +179,7 @@ impl NoteSpawner {
         }
     }
 
-    pub fn spawn(&mut self, music: &MusicManager, timing: &TimingPointManager) {
+    pub fn spawn(&mut self, playfield: Rect, music: &MusicManager, timing: &TimingPointManager) {
         let curr = &self.objs[self.index];
         let combo_color = self.combo_colors[self.combo % self.combo_colors.len()];
         match curr {
@@ -138,6 +188,7 @@ impl NoteSpawner {
                     self.index += 1;
                     self.render_queue
                         .push(RenderableObject::Circle(RenderableCircle {
+                            combo: self.combo,
                             combo_color,
                             time: obj.time as f32,
                             x: obj.x as f32,
@@ -152,24 +203,27 @@ impl NoteSpawner {
             HitObject::Slider(obj) => {
                 if obj.time as f32 - self.preemt <= music.time.as_millis() as f32 {
                     self.index += 1;
-                    self.render_queue
-                        .push(RenderableObject::Slider(RenderableSlider {
-                            combo_color,
-                            time: obj.time as f32,
-                            x: obj.x as f32,
-                            y: obj.y as f32,
-                            length: self.slider_length(obj.pixel_length, &timing),
-                            curves: obj
-                                .curve_points
-                                .iter()
-                                .map(|i| Vec2 {
-                                    x: i.0 as f32,
-                                    y: i.1 as f32,
-                                })
-                                .collect(),
-                            curve_type: obj.slider_type.clone(),
-                            repeat: obj.repeat as usize,
-                        }));
+                    let mut slider = RenderableSlider {
+                        combo: self.combo,
+                        segments: vec![],
+                        combo_color,
+                        time: obj.time as f32,
+                        x: obj.x as f32,
+                        y: obj.y as f32,
+                        length: self.slider_length(obj.pixel_length, &timing),
+                        curves: obj
+                            .curve_points
+                            .iter()
+                            .map(|i| Vec2 {
+                                x: i.0 as f32,
+                                y: i.1 as f32,
+                            })
+                            .collect(),
+                        curve_type: obj.slider_type.clone(),
+                        repeat: obj.repeat as usize,
+                    };
+                    slider.segments = self.calculate_slider_segments(&slider, playfield);
+                    self.render_queue.push(RenderableObject::Slider(slider));
                     if obj.new_combo {
                         self.combo = 0;
                     }
@@ -195,18 +249,98 @@ impl NoteSpawner {
 
     pub fn despawn(&mut self, music: &MusicManager) {
         let current_time = music.time.as_millis() as f32;
+
         self.render_queue.retain(|o| match o {
-            RenderableObject::Circle(obj) => obj.time > current_time,
-            RenderableObject::Slider(obj) => obj.time + obj.length > current_time,
-            RenderableObject::Spinner(obj) => obj.end_time > current_time,
+            RenderableObject::Circle(obj) => obj.time + 150.0 > current_time,
+            RenderableObject::Slider(obj) => obj.end_time() + 150.0 > current_time,
+            RenderableObject::Spinner(obj) => obj.end_time + 150.0 > current_time,
         });
     }
 
-    pub fn update(&mut self, music: &MusicManager, timing: &TimingPointManager) {
+    pub fn update(&mut self, playfield: Rect, music: &MusicManager, timing: &TimingPointManager) {
         if self.index < self.objs.len() {
-            self.spawn(music, timing);
+            self.spawn(playfield, music, timing);
         }
         self.despawn(music);
+    }
+
+    fn render_combo_number(&self, position: Vec2, combo_num: usize, alpha: f32, playfield: Rect) {
+        let text = combo_num.to_string();
+        let font_size = (self.cs(playfield) * 0.8) as u16; // Scale font with circle size
+        
+        let text_params = TextParams {
+            font_size,
+            color: Color {
+                r: 1.0,
+                g: 1.0,
+                b: 1.0,
+                a: alpha,
+            },
+            ..Default::default()
+        };
+        
+        let text_dims = measure_text(&text, None, font_size, 1.0);
+        
+        draw_text_ex(
+            &text,
+            position.x - text_dims.width / 2.0,
+            position.y + text_dims.height / 2.0,
+            text_params,
+        );
+    }
+    
+    fn approach_scale(&self, note_time: f32, current_time: f32) -> f32 {
+        let fade_in_start = note_time - self.fade_in;
+        
+        if current_time < fade_in_start {
+            4.0
+        } else if current_time >= note_time {
+            1.0
+        } else {
+            let progress = (current_time - fade_in_start) / self.fade_in;
+            4.0 - (3.0 * progress)
+        }
+    }
+
+    fn should_show_approach_circle(&self, note_time: f32, current_time: f32) -> bool {
+        let fade_in_start = note_time - self.fade_in;
+        current_time >= fade_in_start && current_time < note_time + 100.0
+    }
+
+    fn render_approach_circle(&self, coord: Vec2, time: f32, combo_color: (f32, f32, f32), current_time: f32, playfield: Rect) {
+        if !self.should_show_approach_circle(time, current_time) {
+            return;
+        }
+        
+        let scale = self.approach_scale(time, current_time);
+        let base_radius = self.cs(playfield);
+        let approach_radius = base_radius * scale;
+        
+        let fade_in_start = time - self.fade_in;
+        let alpha = if current_time < fade_in_start {
+            0.0
+        } else if current_time < time {
+            let fade_progress = (current_time - fade_in_start) / self.fade_in;
+            fade_progress.min(1.0)
+        } else {
+            let time_after_hit = current_time - time;
+            (1.0 - (time_after_hit / 100.0)).max(0.0)
+        };
+        
+        let approach_color = Color {
+            r: combo_color.0,
+            g: combo_color.1,
+            b: combo_color.2,
+            a: alpha,
+        };
+        
+        draw_circle_lines(
+            coord.x,
+            coord.y,
+            approach_radius,
+            2.5,
+            approach_color,
+        );
     }
 
     pub fn render_circle(&self, circle: &RenderableCircle, current_time: f32, playfield: Rect) {
@@ -220,54 +354,46 @@ impl NoteSpawner {
             3.,
             self.color_with_alpha(circle.combo_color, alpha),
         );
+        self.render_combo_number(coord, circle.combo, alpha, playfield);
+        self.render_approach_circle(coord, circle.time, circle.combo_color, current_time, playfield);
     }
 
     fn render_slider(&self, slider: &RenderableSlider, current_time: f32, playfield: Rect) {
-        let alpha = self.alpha(slider.time, current_time);
+        let alpha = self.slider_alpha(slider, current_time);
         let color = self.color_with_alpha(slider.combo_color, alpha);
         let radius = self.cs(playfield);
 
         let start_pos = Self::map_coords(Vec2::new(slider.x, slider.y), playfield);
+
+        self.render_slider_body(slider, radius, alpha);
         draw_circle_lines(start_pos.x, start_pos.y, radius, 3.0, color);
-        self.render_slider_body(slider, radius, alpha, playfield);
-        // self.draw_slider_ticks(slider, start_pos, radius, alpha, playfield);
+        self.render_approach_circle(start_pos, slider.time, slider.combo_color, current_time, playfield);
+
+        self.render_combo_number(start_pos, slider.combo, alpha, playfield);
     }
 
-    fn render_slider_body(
-        &self,
-        slider: &RenderableSlider,
-        radius: f32,
-        alpha: f32,
-        playfield: Rect,
-    ) {
-        let segments = self.calculate_slider_segments(slider, playfield);
+    fn render_slider_body(&self, slider: &RenderableSlider, radius: f32, alpha: f32) {
         let color = Color {
-            r: 1.0,
-            g: 1.0,
-            b: 1.0,
+            r: 0.1,
+            g: 0.1,
+            b: 0.1,
             a: alpha,
         };
 
-        for i in 0..segments.len() - 1 {
-            let start = segments[i];
-            let end = segments[i + 1];
+        for i in 0..slider.segments.len() - 1 {
+            let start = slider.segments[i];
+            let end = slider.segments[i + 1];
 
             draw_line(start.x, start.y, end.x, end.y, 3.0, color);
-            draw_circle_lines(start.x, start.y, radius, 3.0, color);
-        }
-
-        if let Some(last) = segments.last() {
-            draw_circle_lines(last.x, last.y, radius, 3.0, color);
+            draw_circle(start.x, start.y, radius, color);
         }
     }
 
     fn calculate_slider_segments(&self, slider: &RenderableSlider, playfield: Rect) -> Vec<Vec2> {
         let mut segments = Vec::new();
 
-        // Always include the starting point
         segments.push(Self::map_coords(Vec2::new(slider.x, slider.y), playfield));
 
-        // Handle empty curves case (linear slider with just start point)
         if slider.curves.is_empty() {
             return segments;
         }
@@ -288,7 +414,6 @@ impl NoteSpawner {
                 }
             }
             SliderType::Catmull => {
-                // Need at least 2 points for Catmull-Rom
                 if slider.curves.len() >= 1 {
                     let points = std::iter::once((slider.x, slider.y))
                         .chain(slider.curves.iter().map(|c| (c.x, c.y)))
@@ -301,74 +426,66 @@ impl NoteSpawner {
                     }
                 }
             }
-            SliderType::Perfect => {
-                match slider.curves.len() {
-                    0 => {}
-                    1 => calculate_linear_segments(slider, playfield, &mut segments),
-                    _ => {
-                        let p0 = (slider.x, slider.y);
-                        let p1 = (slider.curves[0].x, slider.curves[0].y);
-                        let p2 = (slider.curves[1].x, slider.curves[1].y);
+            SliderType::Perfect => match slider.curves.len() {
+                0 => {}
+                1 => calculate_linear_segments(slider, playfield, &mut segments),
+                _ => {
+                    let p0 = (slider.x, slider.y);
+                    let p1 = (slider.curves[0].x, slider.curves[0].y);
+                    let p2 = (slider.curves[1].x, slider.curves[1].y);
 
-                        if are_points_collinear(p0, p1, p2) {
-                            let mut current_point = Vec2::new(slider.x, slider.y);
-                            segments.clear();
-                            segments.push(Self::map_coords(current_point, playfield));
+                    if are_points_collinear(p0, p1, p2) {
+                        let mut current_point = Vec2::new(slider.x, slider.y);
+                        segments.clear();
+                        segments.push(Self::map_coords(current_point, playfield));
 
-                            for curve_point in &slider.curves {
-                                for i in 1..=10 {
-                                    let t = i as f32 / 10.0;
-                                    let point = Vec2::new(
-                                        lerp(current_point.x, curve_point.x, t),
-                                        lerp(current_point.y, curve_point.y, t),
-                                    );
-                                    segments.push(Self::map_coords(point, playfield));
-                                }
-                                current_point = *curve_point;
-                            }
-                        } else if let Some((center, radius)) = circle_through_points(p0, p1, p2) {
-                            if radius < 1000.0 && radius > 1.0 {
-                                let angle0 = (p0.1 - center.1).atan2(p0.0 - center.0);
-                                let angle2 = (p2.1 - center.1).atan2(p2.0 - center.0);
-                                let angle1 = (p1.1 - center.1).atan2(p1.0 - center.0);
-
-                                let normalize_angle = |mut angle: f32| {
-                                    while angle < 0.0 {
-                                        angle += 2.0 * std::f32::consts::PI;
-                                    }
-                                    while angle >= 2.0 * std::f32::consts::PI {
-                                        angle -= 2.0 * std::f32::consts::PI;
-                                    }
-                                    angle
-                                };
-
-                                let angle0 = normalize_angle(angle0);
-                                let angle1 = normalize_angle(angle1);
-                                let angle2 = normalize_angle(angle2);
-
-                                let (start_angle, end_angle) =
-                                    determine_arc_direction(angle0, angle1, angle2);
-
-                                let arc_length = (end_angle - start_angle).abs();
-                                let num_segments =
-                                    ((radius * arc_length / 10.0).ceil() as usize).max(20);
-
-                                segments.clear();
-                                for i in 0..=num_segments {
-                                    let t = i as f32 / num_segments as f32;
-                                    let angle = start_angle + t * (end_angle - start_angle);
-                                    let point = Vec2::new(
-                                        center.0 + radius * angle.cos(),
-                                        center.1 + radius * angle.sin(),
-                                    );
-                                    segments.push(Self::map_coords(point, playfield));
-                                }
-                            } else {
-                                calculate_linear_segments_through_points(
-                                    slider,
-                                    playfield,
-                                    &mut segments,
+                        for curve_point in &slider.curves {
+                            for i in 1..=10 {
+                                let t = i as f32 / 10.0;
+                                let point = Vec2::new(
+                                    lerp(current_point.x, curve_point.x, t),
+                                    lerp(current_point.y, curve_point.y, t),
                                 );
+                                segments.push(Self::map_coords(point, playfield));
+                            }
+                            current_point = *curve_point;
+                        }
+                    } else if let Some((center, radius)) = circle_through_points(p0, p1, p2) {
+                        if radius < 1000.0 && radius > 1.0 {
+                            let angle0 = (p0.1 - center.1).atan2(p0.0 - center.0);
+                            let angle2 = (p2.1 - center.1).atan2(p2.0 - center.0);
+                            let angle1 = (p1.1 - center.1).atan2(p1.0 - center.0);
+
+                            let normalize_angle = |mut angle: f32| {
+                                while angle < 0.0 {
+                                    angle += 2.0 * std::f32::consts::PI;
+                                }
+                                while angle >= 2.0 * std::f32::consts::PI {
+                                    angle -= 2.0 * std::f32::consts::PI;
+                                }
+                                angle
+                            };
+
+                            let angle0 = normalize_angle(angle0);
+                            let angle1 = normalize_angle(angle1);
+                            let angle2 = normalize_angle(angle2);
+
+                            let (start_angle, end_angle) =
+                                determine_arc_direction(angle0, angle1, angle2);
+
+                            let arc_length = (end_angle - start_angle).abs();
+                            let num_segments =
+                                ((radius * arc_length / 10.0).ceil() as usize).max(20);
+
+                            segments.clear();
+                            for i in 0..=num_segments {
+                                let t = i as f32 / num_segments as f32;
+                                let angle = start_angle + t * (end_angle - start_angle);
+                                let point = Vec2::new(
+                                    center.0 + radius * angle.cos(),
+                                    center.1 + radius * angle.sin(),
+                                );
+                                segments.push(Self::map_coords(point, playfield));
                             }
                         } else {
                             calculate_linear_segments_through_points(
@@ -377,9 +494,11 @@ impl NoteSpawner {
                                 &mut segments,
                             );
                         }
+                    } else {
+                        calculate_linear_segments_through_points(slider, playfield, &mut segments);
                     }
                 }
-            }
+            },
         }
 
         segments

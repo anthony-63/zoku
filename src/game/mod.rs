@@ -2,9 +2,9 @@ use music::MusicManager;
 use notes::NoteSpawner;
 use timing::TimingPointManager;
 
-use crate::content::beatmap::{Difficulty, MetadataSection};
+use crate::content::beatmap::Difficulty;
 
-use macroquad::{miniquad::window::set_window_size, prelude::*};
+use macroquad::prelude::*;
 
 mod music;
 mod notes;
@@ -53,7 +53,7 @@ impl Game {
             self.music.update();
             self.timing.update(&self.music);
 
-            self.notes.update(&self.music, &self.timing);
+            self.notes.update(self.playfield, &self.music, &self.timing);
             self.notes.render(&self.music, self.playfield);
 
             draw_text(
@@ -65,9 +65,17 @@ impl Game {
             );
 
             draw_text(
-                &format!("{}", self.music.time.as_secs_f64()),
+                &format!("time: {:.2}", self.music.time.as_secs_f64()),
                 10.,
                 40.,
+                23.,
+                color_u8!(0xFF, 0x74, 0x6C, 0xff),
+            );
+
+            draw_text(
+                &format!("bpm: {:.2}", self.timing.bpm()),
+                10.,
+                60.,
                 23.,
                 color_u8!(0xFF, 0x74, 0x6C, 0xff),
             );
