@@ -124,7 +124,7 @@ pub struct DifficultySection {
 
 #[derive(Clone)]
 pub struct TimingPoint {
-    pub offset: i32,
+    pub offset: f32,
     pub ms_per_beat: f32,
     pub meter: i32,
     pub sample_set: String,

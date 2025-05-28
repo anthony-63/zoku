@@ -30,7 +30,7 @@ impl TimingPointManager {
         }
 
         let curr = &self.points[self.index];
-        if music.time.as_millis() as i32 >= curr.offset {
+        if music.time.as_millis() as f32 >= curr.offset {
             if curr.ms_per_beat > 0.0 {
                 self.current_uninherited = curr.clone();
                 self.current_inherited = None;
