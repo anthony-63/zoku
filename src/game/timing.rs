@@ -11,7 +11,8 @@ pub struct TimingPointManager {
 
 impl TimingPointManager {
     pub fn new(points: Vec<TimingPoint>) -> Self {
-        let first_uninherited = points.iter()
+        let first_uninherited = points
+            .iter()
             .find(|p| p.ms_per_beat > 0.0)
             .unwrap_or(&points[0])
             .clone();

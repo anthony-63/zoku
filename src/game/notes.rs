@@ -267,7 +267,7 @@ impl NoteSpawner {
     fn render_combo_number(&self, position: Vec2, combo_num: usize, alpha: f32, playfield: Rect) {
         let text = combo_num.to_string();
         let font_size = (self.cs(playfield) * 0.8) as u16; // Scale font with circle size
-        
+
         let text_params = TextParams {
             font_size,
             color: Color {
@@ -278,9 +278,9 @@ impl NoteSpawner {
             },
             ..Default::default()
         };
-        
+
         let text_dims = measure_text(&text, None, font_size, 1.0);
-        
+
         draw_text_ex(
             &text,
             position.x - text_dims.width / 2.0,
@@ -288,10 +288,10 @@ impl NoteSpawner {
             text_params,
         );
     }
-    
+
     fn approach_scale(&self, note_time: f32, current_time: f32) -> f32 {
         let fade_in_start = note_time - self.fade_in;
-        
+
         if current_time < fade_in_start {
             4.0
         } else if current_time >= note_time {
@@ -307,15 +307,22 @@ impl NoteSpawner {
         current_time >= fade_in_start && current_time < note_time + 100.0
     }
 
-    fn render_approach_circle(&self, coord: Vec2, time: f32, combo_color: (f32, f32, f32), current_time: f32, playfield: Rect) {
+    fn render_approach_circle(
+        &self,
+        coord: Vec2,
+        time: f32,
+        combo_color: (f32, f32, f32),
+        current_time: f32,
+        playfield: Rect,
+    ) {
         if !self.should_show_approach_circle(time, current_time) {
             return;
         }
-        
+
         let scale = self.approach_scale(time, current_time);
         let base_radius = self.cs(playfield);
         let approach_radius = base_radius * scale;
-        
+
         let fade_in_start = time - self.fade_in;
         let alpha = if current_time < fade_in_start {
             0.0
@@ -326,21 +333,15 @@ impl NoteSpawner {
             let time_after_hit = current_time - time;
             (1.0 - (time_after_hit / 100.0)).max(0.0)
         };
-        
+
         let approach_color = Color {
             r: combo_color.0,
             g: combo_color.1,
             b: combo_color.2,
             a: alpha,
         };
-        
-        draw_circle_lines(
-            coord.x,
-            coord.y,
-            approach_radius,
-            2.5,
-            approach_color,
-        );
+
+        draw_circle_lines(coord.x, coord.y, approach_radius, 2.5, approach_color);
     }
 
     pub fn render_circle(&self, circle: &RenderableCircle, current_time: f32, playfield: Rect) {
@@ -355,7 +356,13 @@ impl NoteSpawner {
             self.color_with_alpha(circle.combo_color, alpha),
         );
         self.render_combo_number(coord, circle.combo, alpha, playfield);
-        self.render_approach_circle(coord, circle.time, circle.combo_color, current_time, playfield);
+        self.render_approach_circle(
+            coord,
+            circle.time,
+            circle.combo_color,
+            current_time,
+            playfield,
+        );
     }
 
     fn render_slider(&self, slider: &RenderableSlider, current_time: f32, playfield: Rect) {
@@ -367,7 +374,13 @@ impl NoteSpawner {
 
         self.render_slider_body(slider, radius, alpha);
         draw_circle_lines(start_pos.x, start_pos.y, radius, 3.0, color);
-        self.render_approach_circle(start_pos, slider.time, slider.combo_color, current_time, playfield);
+        self.render_approach_circle(
+            start_pos,
+            slider.time,
+            slider.combo_color,
+            current_time,
+            playfield,
+        );
 
         self.render_combo_number(start_pos, slider.combo, alpha, playfield);
     }
