@@ -1,8 +1,8 @@
 use macroquad::prelude::*;
 
-use crate::content::beatmap::{DifficultySection, HitCircle, HitObject, Slider, Spinner};
+use crate::content::beatmap::{DifficultySection, HitCircle, HitObject, Slider, Spinner, TimingPoint};
 
-use super::music::MusicManager;
+use super::{music::MusicManager, timing::TimingPointManager};
 
 pub struct NoteSpawner {
     objs: Vec<HitObject>,
@@ -10,6 +10,7 @@ pub struct NoteSpawner {
     preemt: f32,
     fade_in: f32,
     cs: f32,
+    slider_multiplier: f32,
     render_queue: Vec<RenderableObject>,
     combo: usize,
     combo_colors: Vec<(f32, f32, f32)>,
@@ -37,12 +38,13 @@ pub struct RenderableSlider {
     x: f32,
     y: f32,
     curves: Vec<Vec2>,
+    length: f32,
     repeat: usize,
 }
 
 #[derive(Debug, Clone)]
 pub struct RenderableSpinner {
-    time: f32,
+    end_time: f32,
 }
 
 impl NoteSpawner {
@@ -73,13 +75,15 @@ impl NoteSpawner {
             index: 0,
             preemt,
             fade_in,
+            slider_multiplier: difficulty.slider_multiplier,
             cs: difficulty.circle_size,
             combo: 0,
-            combo_colors: vec![(0.0, 0.81, 0.82),
-                                (0.13, 0.70, 0.67),
-                                (0.25, 0.88, 0.82),
-                                (0.0, 1.0, 1.0),
-                                (0.0, 0.75, 1.0)]
+            combo_colors: vec![
+                (0.90, 0.94, 0.39),
+                (0.78, 0.69, 0.99),
+                (0.45, 0.82, 0.53),
+                (0.39, 0.55, 0.92),
+            ],
         }
     }
 
@@ -92,16 +96,16 @@ impl NoteSpawner {
         }
     }
 
-    fn cs(&self, playfield: Rect) -> f32 {
-        let scale = playfield.h / 384.;
-        (109. - 9. * self.cs) / scale
+    fn slider_length(&self, length: f32, point: &TimingPoint) -> f32 {
+        length / (self.slider_multiplier * 100.) * point.ms_per_beat
     }
 
-    pub fn update(&mut self, music: &MusicManager) {
-        if self.index >= self.objs.len() {
-            return;
-        }
+    fn cs(&self, playfield: Rect) -> f32 {
+        let scale = playfield.h / 384.;
+        (108.0 - 8.0 * self.cs) * scale / 2.
+    }
 
+    pub fn spawn(&mut self, music: &MusicManager, timing: &TimingPointManager) {
         let curr = &self.objs[self.index];
         let combo_color = self.combo_colors[self.combo % self.combo_colors.len()];
         match curr {
@@ -118,8 +122,8 @@ impl NoteSpawner {
                     if obj.new_combo {
                         self.combo = 0;
                     }
+                    self.combo += 1;
                 }
-
             }
             HitObject::Slider(obj) => {
                 if obj.time as f32 - self.preemt <= music.time.as_millis() as f32 {
@@ -130,48 +134,58 @@ impl NoteSpawner {
                             time: obj.time as f32,
                             x: obj.x as f32,
                             y: obj.y as f32,
-                            curves: obj.curve_points.iter().map(|i| Vec2 { x: i.0 as f32, y: i.1 as f32 }).collect(),
+                            length: self.slider_length(obj.pixel_length, &timing.current),
+                            curves: obj
+                                .curve_points
+                                .iter()
+                                .map(|i| Vec2 {
+                                    x: i.0 as f32,
+                                    y: i.1 as f32,
+                                })
+                                .collect(),
                             repeat: obj.repeat as usize,
                         }));
                     if obj.new_combo {
                         self.combo = 0;
                     }
+                    self.combo += 1;
                 }
-
             }
             HitObject::Spinner(obj) => {
                 if obj.time as f32 - self.preemt <= music.time.as_millis() as f32 {
                     self.index += 1;
                     self.render_queue
                         .push(RenderableObject::Spinner(RenderableSpinner {
-                            time: obj.time as f32,
+                            end_time: obj.end_time as f32,
                         }));
                     if obj.new_combo {
                         self.combo = 0;
                     }
+                    self.combo += 1;
                 }
             }
             _ => {}
         }
+    }
 
-        self.render_queue = self.render_queue.clone().into_iter().filter(|o| {
-            match o {
-                RenderableObject::Circle(obj) => {
-                    obj.time > music.time.as_millis() as f32
-                }
-                RenderableObject::Slider(obj) => {
-                    obj.time > music.time.as_millis() as f32
-                }
-                RenderableObject::Spinner(obj) => {
-                    obj.time > music.time.as_millis() as f32
-                }
-            }
-        }).collect();
-        self.render_queue.reverse();
+    pub fn despawn(&mut self, music: &MusicManager) {
+        let current_time = music.time.as_millis() as f32;
+        self.render_queue.retain(|o| match o {
+            RenderableObject::Circle(obj) => obj.time > current_time,
+            RenderableObject::Slider(obj) => obj.time + obj.length > current_time,
+            RenderableObject::Spinner(obj) => obj.end_time > current_time,
+        });
+    }
+
+    pub fn update(&mut self, music: &MusicManager, timing: &TimingPointManager) {
+        if self.index < self.objs.len() {
+            self.spawn(music, timing);
+        }
+        self.despawn(music);
     }
 
     pub fn render(&mut self, music: &MusicManager, playfield: Rect) {
-        for o in self.render_queue.iter() {
+        for o in self.render_queue.iter().rev() {
             match o {
                 RenderableObject::Circle(obj) => {
                     let coord = Self::map_coords(Vec2::new(obj.x, obj.y), playfield);
@@ -234,7 +248,13 @@ impl NoteSpawner {
                     }
                 }
                 RenderableObject::Spinner(obj) => {
-                    draw_circle_lines(screen_width() / 2., screen_height() / 2., screen_width() / 6., 5., GREEN);
+                    draw_circle_lines(
+                        screen_width() / 2.,
+                        screen_height() / 2.,
+                        screen_width() / 6.,
+                        5.,
+                        GREEN,
+                    );
                     draw_circle(screen_width() / 2., screen_height() / 2., 5., GREEN);
                 }
             }

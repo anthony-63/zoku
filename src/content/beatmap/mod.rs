@@ -122,6 +122,7 @@ pub struct DifficultySection {
     pub slider_tick_rate: f32,
 }
 
+#[derive(Clone)]
 pub struct TimingPoint {
     pub offset: i32,
     pub ms_per_beat: f32,

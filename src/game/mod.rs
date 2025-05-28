@@ -1,5 +1,6 @@
 use music::MusicManager;
 use notes::NoteSpawner;
+use timing::TimingPointManager;
 
 use crate::content::beatmap::{Difficulty, MetadataSection};
 
@@ -7,10 +8,12 @@ use macroquad::{miniquad::window::set_window_size, prelude::*};
 
 mod music;
 mod notes;
+mod timing;
 
 pub struct Game {
     music: MusicManager,
     notes: NoteSpawner,
+    timing: TimingPointManager,
     title: String,
     playfield: Rect,
 }
@@ -19,6 +22,7 @@ impl Game {
     pub fn new(difficulty: &Difficulty) -> Self {
         let music = MusicManager::new(&difficulty.audio_bytes);
         let notes = NoteSpawner::new(difficulty.hit_objects.clone(), &difficulty.difficulty);
+        let timing = TimingPointManager::new(difficulty.timing_points.clone());
 
         let h = screen_height() * 0.8;
         let w = h * (4. / 3.);
@@ -33,6 +37,7 @@ impl Game {
             music,
             notes,
             playfield,
+            timing,
             title: format!(
                 "{}[{}]",
                 difficulty.metadata.title.clone(),
@@ -47,7 +52,7 @@ impl Game {
         loop {
             self.music.update();
 
-            self.notes.update(&self.music);
+            self.notes.update(&self.music, &self.timing);
             self.notes.render(&self.music, self.playfield);
 
             draw_text(
