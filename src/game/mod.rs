@@ -2,7 +2,7 @@ use music::MusicManager;
 use notes::NoteSpawner;
 use timing::TimingPointManager;
 
-use crate::content::beatmap::Difficulty;
+use crate::content::{beatmap::Difficulty, skin::Skin};
 
 use macroquad::prelude::*;
 
@@ -16,10 +16,11 @@ pub struct Game {
     timing: TimingPointManager,
     title: String,
     playfield: Rect,
+    skin: Skin,
 }
 
 impl Game {
-    pub fn new(difficulty: &Difficulty) -> Self {
+    pub fn new(skin: &Skin, difficulty: &Difficulty) -> Self {
         let music = MusicManager::new(&difficulty.audio_bytes);
         let notes = NoteSpawner::new(difficulty.hit_objects.clone(), &difficulty.difficulty);
         let timing = TimingPointManager::new(difficulty.timing_points.clone());
@@ -35,6 +36,7 @@ impl Game {
         };
         Self {
             music,
+            skin: skin.clone(),
             notes,
             playfield,
             timing,
@@ -54,7 +56,7 @@ impl Game {
             self.timing.update(&self.music);
 
             self.notes.update(self.playfield, &self.music, &self.timing);
-            self.notes.render(&self.music, self.playfield);
+            self.notes.render(&self.skin, &self.music, self.playfield);
 
             draw_text(
                 &format!("{}", self.title),

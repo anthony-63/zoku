@@ -1,6 +1,6 @@
-use std::io::Write;
+use std::{io::Write, path::Path};
 
-use content::beatmap::formats::osu::OsuParser;
+use content::{beatmap::formats::osu::OsuParser, skin::Skin};
 
 use game::Game;
 use macroquad::prelude::*;
@@ -46,6 +46,7 @@ async fn main() {
         println!("Input not in correct range");
     }
 
-    let mut game = Game::new(&map.difficulties[selected - 1]);
+    let skin = Skin::load(Path::new("skin/")).await;
+    let mut game = Game::new(&skin, &map.difficulties[selected - 1]);
     game.play().await;
 }

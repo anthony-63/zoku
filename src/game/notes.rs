@@ -1,7 +1,7 @@
 use macroquad::prelude::*;
 use num_integer::binomial;
 
-use crate::content::beatmap::{DifficultySection, HitObject, SliderType};
+use crate::content::{beatmap::{DifficultySection, HitObject, SliderType}, skin::Skin};
 
 use super::{music::MusicManager, timing::TimingPointManager};
 
@@ -124,7 +124,7 @@ impl NoteSpawner {
 
     fn cs(&self, playfield: Rect) -> f32 {
         let scale = playfield.h / 384.;
-        (108.0 - 8.0 * self.cs) * scale / 2.
+        (108.0 - 8.0 * self.cs) * scale
     }
 
     fn alpha(&self, note_time: f32, current_time: f32) -> f32 {
@@ -264,12 +264,13 @@ impl NoteSpawner {
         self.despawn(music);
     }
 
-    fn render_combo_number(&self, position: Vec2, combo_num: usize, alpha: f32, playfield: Rect) {
+    fn render_combo_number(&self, skin: &Skin, position: Vec2, combo_num: usize, alpha: f32, playfield: Rect) {
         let text = combo_num.to_string();
-        let font_size = (self.cs(playfield) * 0.8) as u16; // Scale font with circle size
+        let font_size = ((self.cs(playfield) / 2.) * 0.8) as u16; // Scale font with circle size
 
         let text_params = TextParams {
             font_size,
+            font: Some(&skin.font),
             color: Color {
                 r: 1.0,
                 g: 1.0,
@@ -279,7 +280,7 @@ impl NoteSpawner {
             ..Default::default()
         };
 
-        let text_dims = measure_text(&text, None, font_size, 1.0);
+        let text_dims = measure_text(&text, Some(&skin.font), font_size, 1.0);
 
         draw_text_ex(
             &text,
@@ -309,6 +310,7 @@ impl NoteSpawner {
 
     fn render_approach_circle(
         &self,
+        skin: &Skin,
         coord: Vec2,
         time: f32,
         combo_color: (f32, f32, f32),
@@ -320,7 +322,7 @@ impl NoteSpawner {
         }
 
         let scale = self.approach_scale(time, current_time);
-        let base_radius = self.cs(playfield);
+        let base_radius = self.cs(playfield) / 2.;
         let approach_radius = base_radius * scale;
 
         let fade_in_start = time - self.fade_in;
@@ -341,22 +343,32 @@ impl NoteSpawner {
             a: alpha,
         };
 
-        draw_circle_lines(coord.x, coord.y, approach_radius, 2.5, approach_color);
+        let approach_size = approach_radius * 2.;
+
+        let params = DrawTextureParams {
+            dest_size: Some(Vec2::new(approach_size, approach_size)),
+            ..Default::default()
+        };
+
+        draw_texture_ex(&skin.approach_circle, coord.x - approach_size / 2., coord.y - approach_size / 2., approach_color, params);
     }
 
-    pub fn render_circle(&self, circle: &RenderableCircle, current_time: f32, playfield: Rect) {
+    pub fn render_circle(&self, circle: &RenderableCircle, skin: &Skin, current_time: f32, playfield: Rect) {
         let coord = Self::map_coords(Vec2::new(circle.x, circle.y), playfield);
         let alpha = self.alpha(circle.time, current_time);
+        let cs = self.cs(playfield);
 
-        draw_circle_lines(
-            coord.x,
-            coord.y,
-            self.cs(playfield),
-            3.,
-            self.color_with_alpha(circle.combo_color, alpha),
-        );
-        self.render_combo_number(coord, circle.combo, alpha, playfield);
+        let circle_params = DrawTextureParams {
+            dest_size: Some(Vec2::new(cs, cs)),
+            ..Default::default()
+        };
+
+        draw_texture_ex(&skin.hit_circle, coord.x - cs / 2., coord.y - cs / 2., self.color_with_alpha(circle.combo_color, alpha), circle_params.clone());
+        draw_texture_ex(&skin.hit_circle_overlay, coord.x - cs / 2., coord.y - cs / 2., self.color_with_alpha(circle.combo_color, alpha), circle_params);
+
+        self.render_combo_number(skin, coord, circle.combo, alpha, playfield);
         self.render_approach_circle(
+            skin,
             coord,
             circle.time,
             circle.combo_color,
@@ -365,16 +377,26 @@ impl NoteSpawner {
         );
     }
 
-    fn render_slider(&self, slider: &RenderableSlider, current_time: f32, playfield: Rect) {
+    fn render_slider(&self, slider: &RenderableSlider, skin: &Skin, current_time: f32, playfield: Rect) {
         let alpha = self.slider_alpha(slider, current_time);
         let color = self.color_with_alpha(slider.combo_color, alpha);
-        let radius = self.cs(playfield);
+        let cs = self.cs(playfield);
+        let radius = cs / 2.;
 
         let start_pos = Self::map_coords(Vec2::new(slider.x, slider.y), playfield);
 
+        let circle_params = DrawTextureParams {
+            dest_size: Some(Vec2::new(cs, cs)),
+            ..Default::default()
+        };
+
         self.render_slider_body(slider, radius, alpha);
-        draw_circle_lines(start_pos.x, start_pos.y, radius, 3.0, color);
+
+        draw_texture_ex(&skin.slider_start_circle, start_pos.x - cs / 2., start_pos.y - cs / 2., self.color_with_alpha(slider.combo_color, alpha), circle_params.clone());
+        draw_texture_ex(&skin.slider_start_circle_overlay, start_pos.x - cs / 2., start_pos.y - cs / 2., self.color_with_alpha(slider.combo_color, alpha), circle_params);
+        
         self.render_approach_circle(
+            skin,
             start_pos,
             slider.time,
             slider.combo_color,
@@ -382,7 +404,7 @@ impl NoteSpawner {
             playfield,
         );
 
-        self.render_combo_number(start_pos, slider.combo, alpha, playfield);
+        self.render_combo_number(skin, start_pos, slider.combo, alpha, playfield);
     }
 
     fn render_slider_body(&self, slider: &RenderableSlider, radius: f32, alpha: f32) {
@@ -395,9 +417,6 @@ impl NoteSpawner {
 
         for i in 0..slider.segments.len() - 1 {
             let start = slider.segments[i];
-            let end = slider.segments[i + 1];
-
-            draw_line(start.x, start.y, end.x, end.y, 3.0, color);
             draw_circle(start.x, start.y, radius, color);
         }
     }
@@ -517,7 +536,7 @@ impl NoteSpawner {
         segments
     }
 
-    fn render_spinner(&self, _spinner: &RenderableSpinner) {
+    fn render_spinner(&self, _spinner: &RenderableSpinner, skin: &Skin) {
         let center_x = screen_width() / 2.;
         let center_y = screen_height() / 2.;
 
@@ -525,14 +544,14 @@ impl NoteSpawner {
         draw_circle(center_x, center_y, 5., GREEN);
     }
 
-    pub fn render(&mut self, music: &MusicManager, playfield: Rect) {
+    pub fn render(&mut self, skin: &Skin, music: &MusicManager, playfield: Rect) {
         let current_time = music.time.as_millis() as f32;
 
         for o in self.render_queue.iter().rev() {
             match o {
-                RenderableObject::Circle(obj) => self.render_circle(obj, current_time, playfield),
-                RenderableObject::Slider(obj) => self.render_slider(obj, current_time, playfield),
-                RenderableObject::Spinner(obj) => self.render_spinner(obj),
+                RenderableObject::Circle(obj) => self.render_circle(obj, skin, current_time, playfield),
+                RenderableObject::Slider(obj) => self.render_slider(obj, skin, current_time, playfield),
+                RenderableObject::Spinner(obj) => self.render_spinner(obj, skin),
             }
         }
     }
