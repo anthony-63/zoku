@@ -138,7 +138,7 @@ impl NoteSpawner {
         } else if current_time < note_time {
             1.0
         } else {
-            let fade_out_duration = 150.0; // ms
+            let fade_out_duration = 150.0;
             let time_since_hit = current_time - note_time;
             if time_since_hit < fade_out_duration {
                 1.0 - (time_since_hit / fade_out_duration)
@@ -266,7 +266,7 @@ impl NoteSpawner {
 
     fn render_combo_number(&self, skin: &Skin, position: Vec2, combo_num: usize, alpha: f32, playfield: Rect) {
         let text = combo_num.to_string();
-        let font_size = ((self.cs(playfield) / 2.) * 0.8) as u16; // Scale font with circle size
+        let font_size = ((self.cs(playfield) / 2.) * 0.8) as u16;
 
         let text_params = TextParams {
             font_size,
