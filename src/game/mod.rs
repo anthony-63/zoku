@@ -1,3 +1,4 @@
+use mods::Mods;
 use music::MusicManager;
 use notes::NoteSpawner;
 use timing::TimingPointManager;
@@ -9,11 +10,13 @@ use macroquad::prelude::*;
 mod music;
 mod notes;
 mod timing;
+mod mods;
 
 pub struct Game {
     music: MusicManager,
     notes: NoteSpawner,
     timing: TimingPointManager,
+    mods: Mods,
     title: String,
     playfield: Rect,
     skin: Skin,
@@ -40,6 +43,9 @@ impl Game {
             notes,
             playfield,
             timing,
+            mods: Mods {
+                dt: false,
+            },
             title: format!(
                 "{}[{}]",
                 difficulty.metadata.title.clone(),
@@ -49,7 +55,7 @@ impl Game {
     }
 
     pub async fn play(&mut self) {
-        self.music.play();
+        self.music.play(&self.mods);
 
         loop {
             self.music.update();

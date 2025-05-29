@@ -383,6 +383,7 @@ impl OsuParser {
                         "WidescreenStoryboard" => widescreen_storyboard: parse_bool;
                         "StoryFireInFront" => story_fire_in_front: parse_bool;
                         "SpecialStyle" => special_style: parse_bool;
+                        "EpilepsyWarning" => epilepsy_warning: parse_bool;
                     }
                 })),
 

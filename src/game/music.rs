@@ -1,21 +1,21 @@
 use std::{
     io::Cursor,
-    sync::WaitTimeoutResult,
     time::{Duration, SystemTime},
 };
 
 use kira::{
     AudioManager, AudioManagerSettings, DefaultBackend,
-    clock::{ClockHandle, ClockSpeed},
     sound::static_sound::StaticSoundData,
 };
+
+use super::mods::Mods;
 
 pub struct MusicManager {
     audio_manager: AudioManager,
     music_data: StaticSoundData,
     start_stamp: SystemTime,
+    speed: f64,
     pub time: Duration,
-    pub playing: bool,
 }
 
 impl MusicManager {
@@ -28,18 +28,23 @@ impl MusicManager {
         Self {
             audio_manager: manager,
             music_data: music,
+            speed: 1.0,
             start_stamp: SystemTime::now(),
             time: Duration::from_secs(0),
-            playing: true,
         }
     }
 
-    pub fn play(&mut self) {
-        self.audio_manager.play(self.music_data.clone()).unwrap();
+    pub fn play(&mut self, mods: &Mods) {
+        let mut music = self.music_data.clone();
+        if mods.dt {
+            self.speed = 1.5;
+            music = music.playback_rate(self.speed);
+        }
+        self.audio_manager.play(music).unwrap();
         self.start_stamp = SystemTime::now();
     }
 
     pub fn update(&mut self) {
-        self.time = self.start_stamp.elapsed().unwrap();
+        self.time = self.start_stamp.elapsed().unwrap().mul_f64(self.speed);
     }
 }
